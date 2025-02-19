@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import os
-import openai
+import google.generativeai as genai
 import requests
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message
@@ -12,16 +12,19 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения
 load_dotenv()
 TOKEN = os.getenv("TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not TOKEN or not OPENAI_API_KEY:
+if not TOKEN or not GEMINI_API_KEY:
     raise ValueError("❌ Не установлены переменные окружения! Проверьте Railway Variables.")
 
 # Настройки
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-openai_client = openai.Client(api_key=OPENAI_API_KEY)  # ✅ Новый клиент OpenAI
+
+# Инициализация Google Gemini
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-pro")  # Используем Gemini Pro
 
 # Функция для парсинга текста новости
 def extract_text_from_url(url):
@@ -30,19 +33,16 @@ def extract_text_from_url(url):
         soup = BeautifulSoup(response.text, "html.parser")
         paragraphs = soup.find_all("p")
         text = " ".join([p.get_text() for p in paragraphs])
-        return text[:4000]  # Ограничение для OpenAI
+        return text[:3000]  # Ограничение символов
     except Exception as e:
         return f"Ошибка при парсинге: {e}"
 
-# Функция для анализа новости через ChatGPT
+# Функция для анализа новости через Gemini
 async def check_fake_news(text):
     prompt = f"Определи, является ли эта новость фейковой:\n{text}"
     try:
-        response = openai_client.chat.completions.create(  # ✅ Новый вызов OpenAI API
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.choices[0].message.content
+        response = model.generate_content(prompt)
+        return response.text  # Возвращаем текстовый ответ от Gemini
     except Exception as e:
         return f"Ошибка при анализе: {e}"
 
@@ -62,7 +62,7 @@ async def handle_url(message: Message):
         await message.answer(text)
         return
 
-    # Анализируем через OpenAI
+    # Анализируем через Gemini
     analysis = await check_fake_news(text)
     await message.answer(f"🤖 Анализ новости:\n{analysis}")
 
