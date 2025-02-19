@@ -5,7 +5,7 @@ import openai
 import requests
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message
-from aiogram.filters import Command  # <-- Новый импорт
+from aiogram.filters import Command
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
@@ -21,7 +21,7 @@ if not TOKEN or not OPENAI_API_KEY:
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.Client(api_key=OPENAI_API_KEY)  # ✅ Новый клиент OpenAI
 
 # Функция для парсинга текста новости
 def extract_text_from_url(url):
@@ -38,21 +38,21 @@ def extract_text_from_url(url):
 async def check_fake_news(text):
     prompt = f"Определи, является ли эта новость фейковой:\n{text}"
     try:
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(  # ✅ Новый вызов OpenAI API
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
     except Exception as e:
         return f"Ошибка при анализе: {e}"
 
 # Обработчик команды /start
-@dp.message(Command("start"))  # ✅ Новый синтаксис
+@dp.message(Command("start"))
 async def start(message: Message):
     await message.answer("Привет! Отправь мне ссылку на новость, и я проверю её на достоверность.")
 
 # Обработчик ссылок
-@dp.message(F.text.startswith("http"))  # ✅ Новый способ обработки ссылок
+@dp.message(F.text.startswith("http"))
 async def handle_url(message: Message):
     await message.answer("🔍 Проверяю новость, подожди немного...")
 
