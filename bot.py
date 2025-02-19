@@ -3,19 +3,17 @@ import logging
 import os
 import openai
 import requests
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.types import Message
+from aiogram.filters import Command  # <-- Новый импорт
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 
-# Загружаем переменные из .env (локально) или Railway Variables
+# Загружаем переменные окружения
 load_dotenv()
-
-# Получаем API-ключи из переменных окружения
 TOKEN = os.getenv("TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Проверяем, загружены ли ключи
 if not TOKEN or not OPENAI_API_KEY:
     raise ValueError("❌ Не установлены переменные окружения! Проверьте Railway Variables.")
 
@@ -49,12 +47,12 @@ async def check_fake_news(text):
         return f"Ошибка при анализе: {e}"
 
 # Обработчик команды /start
-@dp.message(commands=["start"])
+@dp.message(Command("start"))  # ✅ Новый синтаксис
 async def start(message: Message):
     await message.answer("Привет! Отправь мне ссылку на новость, и я проверю её на достоверность.")
 
 # Обработчик ссылок
-@dp.message(lambda message: message.text.startswith("http"))
+@dp.message(F.text.startswith("http"))  # ✅ Новый способ обработки ссылок
 async def handle_url(message: Message):
     await message.answer("🔍 Проверяю новость, подожди немного...")
 
