@@ -1,20 +1,28 @@
+import asyncio
 import logging
+import os
 import openai
+import requests
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
-from aiogram.utils import executor
-import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 
-# Твой Telegram API токен
-TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-# Твой OpenAI API ключ
-OPENAI_API_KEY = "YOUR_OPENAI_API_KEY"
+# Загружаем переменные из .env (локально) или Railway Variables
+load_dotenv()
 
-# Инициализация бота и диспетчера
+# Получаем API-ключи из переменных окружения
+TOKEN = os.getenv("TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# Проверяем, загружены ли ключи
+if not TOKEN or not OPENAI_API_KEY:
+    raise ValueError("❌ Не установлены переменные окружения! Проверьте Railway Variables.")
+
+# Настройки
+logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TOKEN)
-dp = Dispatcher(bot)
-
+dp = Dispatcher()
 openai.api_key = OPENAI_API_KEY
 
 # Функция для парсинга текста новости
@@ -24,37 +32,45 @@ def extract_text_from_url(url):
         soup = BeautifulSoup(response.text, "html.parser")
         paragraphs = soup.find_all("p")
         text = " ".join([p.get_text() for p in paragraphs])
-        return text[:4000]  # Ограничение, чтобы не превышать лимит GPT
+        return text[:4000]  # Ограничение для OpenAI
     except Exception as e:
-        return f"Ошибка парсинга: {e}"
+        return f"Ошибка при парсинге: {e}"
 
-# Функция проверки фейковости через ChatGPT
-def check_fake_news(text):
+# Функция для анализа новости через ChatGPT
+async def check_fake_news(text):
     prompt = f"Определи, является ли эта новость фейковой:\n{text}"
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response["choices"][0]["message"]["content"]
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Ошибка при анализе: {e}"
 
 # Обработчик команды /start
-@dp.message_handler(commands=["start"])
+@dp.message(commands=["start"])
 async def start(message: Message):
     await message.answer("Привет! Отправь мне ссылку на новость, и я проверю её на достоверность.")
 
 # Обработчик ссылок
-@dp.message_handler(lambda message: message.text.startswith("http"))
+@dp.message(lambda message: message.text.startswith("http"))
 async def handle_url(message: Message):
-    await message.answer("Проверяю новость, подожди...")
+    await message.answer("🔍 Проверяю новость, подожди немного...")
+
+    # Парсим текст
     text = extract_text_from_url(message.text)
-    if "Ошибка парсинга" in text:
+    if "Ошибка при парсинге" in text:
         await message.answer(text)
         return
 
-    analysis = check_fake_news(text)
-    await message.answer(f"🔍 Анализ новости:\n{analysis}")
+    # Анализируем через OpenAI
+    analysis = await check_fake_news(text)
+    await message.answer(f"🤖 Анализ новости:\n{analysis}")
 
 # Запуск бота
+async def main():
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
